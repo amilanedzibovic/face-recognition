@@ -231,3 +231,5 @@ migrations/
 
 # BBDD
 *.db
+
+datasets/* 

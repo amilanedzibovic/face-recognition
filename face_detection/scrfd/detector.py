@@ -289,6 +289,8 @@ class SCRFD:
         self, image, thresh=0.5, input_size=(128, 128), max_num=0, metric="default"
     ):
         assert input_size is not None or self.input_size is not None
+
+        # print(f"IMAGE: {image}")
         height, width = image.shape[:2]
         img_info = {"id": 0}
         img_info["height"] = height

@@ -94,10 +94,8 @@ def inference(detector, args):
 def main():
     file_name = "./face_tracking/config/config_tracking.yaml"
     config_tracking = load_config(file_name)
-    # detector = Yolov5Face(
-    #     model_file="face_detection/yolov5_face/weights/yolov5m-face.pt"
-    # )
-    detector = SCRFD(model_file="face_detection/scrfd/weights/scrfd_2.5g_bnkps.onnx")
+    # detector = SCRFD(model_file="face_detection/scrfd/weights/scrfd_2.5g_bnkps.onnx")
+    detector = Yolov5Face(model_file="face_detection/yolov5_face/weights/yolov5n-face.pt")
 
     inference(detector=detector, args=config_tracking)
 

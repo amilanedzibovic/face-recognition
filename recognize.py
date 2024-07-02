@@ -1,5 +1,7 @@
 import threading
 import time
+import queue
+import multiprocessing
 
 import cv2
 import numpy as np
@@ -19,8 +21,8 @@ from face_tracking.tracker.visualize import plot_tracking
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # Face detector (choose one)
-detector = SCRFD(model_file="face_detection/scrfd/weights/scrfd_2.5g_bnkps.onnx")
-# detector = Yolov5Face(model_file="face_detection/yolov5_face/weights/yolov5n-face.pt")
+# detector = SCRFD(model_file="face_detection/scrfd/weights/scrfd_2.5g_bnkps.onnx")
+detector = Yolov5Face(model_file="face_detection/yolov5_face/weights/yolov5n-face.pt")
 
 # Face recognizer
 recognizer = iresnet_inference(
@@ -82,7 +84,7 @@ def process_tracking(frame, detector, tracker, args, frame_id, fps):
     tracking_ids = []
     tracking_scores = []
     tracking_bboxes = []
-
+    
     if outputs is not None:
         online_targets = tracker.update(
             outputs, [img_info["height"], img_info["width"]], (128, 128)
@@ -116,6 +118,9 @@ def process_tracking(frame, detector, tracker, args, frame_id, fps):
     data_mapping["detection_landmarks"] = landmarks
     data_mapping["tracking_ids"] = tracking_ids
     data_mapping["tracking_bboxes"] = tracking_bboxes
+
+    # print(f"TRACKING: {data_mapping}")
+
 
     return tracking_image
 
@@ -207,15 +212,11 @@ def mapping_bbox(box1, box2):
 
     return iou
 
+image_queue = queue.Queue()
+
+stop_flag = threading.Event() 
 
 def tracking(detector, args):
-    """
-    Face tracking in a separate thread.
-
-    Args:
-        detector: The face detector.
-        args (dict): Tracking configuration parameters.
-    """
     # Initialize variables for measuring frame rate
     start_time = time.time_ns()
     frame_count = 0
@@ -225,11 +226,13 @@ def tracking(detector, args):
     tracker = BYTETracker(args=args, frame_rate=30)
     frame_id = 0
 
+    # Video Capture from the default camera (camera index 0)
     cap = cv2.VideoCapture(0)
+    cap.set(3, 640)  # Set width
+    cap.set(4, 480)  # Set height
 
-    while True:
-        _, img = cap.read()
-
+    while not stop_flag.is_set():
+        ret, img = cap.read()
         tracking_image = process_tracking(img, detector, tracker, args, frame_id, fps)
 
         # Calculate and display the frame rate
@@ -239,17 +242,14 @@ def tracking(detector, args):
             frame_count = 0
             start_time = time.time_ns()
 
-        cv2.imshow("Face Recognition", tracking_image)
+        if tracking_image is not None and isinstance(tracking_image, np.ndarray):
+            if tracking_image.size > 0:
+                image_queue.put(tracking_image)
+            else:
+                print("Error: tracking_image is empty")
+        else:
+            print("Error: tracking_image is not valid")
 
-        # Check for user exit input
-        ch = cv2.waitKey(1)
-        if ch == 27 or ch == ord("q") or ch == ord("Q"):
-            break
-
-
-def recognize():
-    """Face recognition in a separate thread."""
-    while True:
         raw_image = data_mapping["raw_image"]
         detection_landmarks = data_mapping["detection_landmarks"]
         detection_bboxes = data_mapping["detection_bboxes"]
@@ -263,6 +263,8 @@ def recognize():
                     face_alignment = norm_crop(img=raw_image, landmark=detection_landmarks[j])
 
                     score, name = recognition(face_image=face_alignment)
+                    print(f"SCORE: {score}, {name}")
+
                     if name is not None:
                         if score < 0.25:
                             caption = "UN_KNOWN"
@@ -279,6 +281,21 @@ def recognize():
         if tracking_bboxes == []:
             print("Waiting for a person...")
 
+    cap.release()
+
+def display_images():
+    while not stop_flag.is_set():
+        if not image_queue.empty():
+            tracking_image = image_queue.get()
+            cv2.imshow("Face Recognition", tracking_image)
+
+        key = cv2.waitKey(1)
+
+        if key == 27 or key == ord("q") or key == ord("Q"):
+            stop_flag.set()
+            break
+    
+    cv2.destroyAllWindows()
 
 def main():
     """Main function to start face tracking and recognition threads."""
@@ -291,14 +308,15 @@ def main():
         args=(
             detector,
             config_tracking,
+            # queue,
         ),
     )
     thread_track.start()
 
-    # Start recognition thread
-    thread_recognize = threading.Thread(target=recognize)
-    thread_recognize.start()
+    display_images()
 
+    thread_track.join()
+   
 
 if __name__ == "__main__":
     main()

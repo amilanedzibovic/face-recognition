@@ -16,8 +16,8 @@ from face_recognition.arcface.utils import read_features
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # Initialize the face detector (Choose one of the detectors)
-# detector = Yolov5Face(model_file="face_detection/yolov5_face/weights/yolov5n-face.pt")
-detector = SCRFD(model_file="face_detection/scrfd/weights/scrfd_2.5g_bnkps.onnx")
+detector = Yolov5Face(model_file="face_detection/yolov5_face/weights/yolov5n-face.pt")
+# detector = SCRFD(model_file="face_detection/scrfd/weights/scrfd_2.5g_bnkps.onnx")
 
 # Initialize the face recognizer
 recognizer = iresnet_inference(
@@ -95,13 +95,17 @@ def add_persons(backup_dir, add_persons_dir, faces_save_dir, features_path):
 
                     # Get the location of the face
                     x1, y1, x2, y2, score = bboxes[i]
+                    print(f"Bounding box coordinates: x1={x1}, y1={y1}, x2={x2}, y2={y2}, score={score}")
 
                     # Extract the face from the image
                     face_image = input_image[y1:y2, x1:x2]
+                    print(f"Face image shape: {face_image.shape}")
 
                     # Path to save the face
                     path_save_face = os.path.join(person_face_path, f"{number_files}.jpg")
-
+                    if face_image.size == 0:
+                        print(f"Empty face image detected for bounding box: {bboxes[i]}")
+                        continue
                     # Save the face to the database
                     cv2.imwrite(path_save_face, face_image)
 
